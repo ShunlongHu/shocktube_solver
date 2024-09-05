@@ -1,26 +1,21 @@
-import numpy as np
+import torch
 
-@np.vectorize 
+@torch.no_grad()
 def cubic_spline(r, h, order):
     
-    q = float(abs(r))/h
+    q = ((torch.abs(r))/h).float()
     sigma = float(2.0 / (3.0 * h))
     if order == 0:
-        if q <=1.0 and q >=0.0: 
-            return sigma * (1.0 - (1.5 * q * q) + (0.75 * q * q * q))
-        elif q > 1.0 and q <= 2.0:
-            return sigma * 0.25 * ((2.0 - q) ** 3.0)
-        else:
-            return 0.0
+        q_lo = sigma * (1.0 - (1.5 * q * q) + (0.75 * q * q * q)) * (q<=1.0).float() * (q>=0.0).float()
+        q_hi = sigma * 0.25 * ((2.0 - q) ** 3.0) * (q>1.0).float() * (q<=2.0).float()
+        return q_lo+q_hi
     else:
-        diff_multiplier = float(np.sign(r) / h)
-        if q <=1.0 and q >=0.0: 
-            return float(sigma * ((-3.0 * q) + (2.25 * q * q)) * diff_multiplier)
-        elif q > 1.0 and q <= 2.0:
-            return float(sigma * -0.75 * ((2 - q) ** 2) * diff_multiplier)
-        else:
-            return 0.0
+        diff_multiplier = (torch.sign(r) / h).float()
+        q_lo = (sigma * ((-3.0 * q) + (2.25 * q * q)) * diff_multiplier).float() * (q<=1.0).float() * (q>=0.0).float()
+        q_hi = (sigma * -0.75 * ((2 - q) ** 2) * diff_multiplier).float() * (q>1.0).float() * (q<=2.0).float()
+        return q_lo+q_hi
 
+@torch.no_grad()
 class Shocktube(object):
     
     ### Need to add solid boundaries ? ###
@@ -46,10 +41,10 @@ class Shocktube(object):
         
         ## Define temp arrays for storing increments ##
         
-        x_inc = np.zeros_like(self.x, dtype='float32')
-        rho_inc = np.zeros_like(self.x, dtype='float32')
-        v_inc = np.zeros_like(self.x, dtype='float32')
-        e_inc = np.zeros_like(self.x, dtype='float32')
+        x_inc = torch.zeros_like(self.x, dtype=torch.float32).cuda()
+        rho_inc = torch.zeros_like(self.x, dtype=torch.float32).cuda()
+        v_inc = torch.zeros_like(self.x, dtype=torch.float32).cuda()
+        e_inc = torch.zeros_like(self.x, dtype=torch.float32).cuda()
         
         ## Iterate over all particles and store the accelerations in temp arrays ##
         ## 10 particles to the left and 10 particles to the right as boundary ###
@@ -84,9 +79,9 @@ class Shocktube(object):
 
             ### Evaluating gradients ###
 
-            grad_rho = self.rho[i] * np.sum(self.m * vij * dwij / self.rho)
-            grad_v = -1 * np.sum(self.m * (p_rho_ij + pi_ij) * dwij)            
-            grad_e = 0.5 * np.sum(self.m * (p_rho_ij + pi_ij) * vij * dwij)
+            grad_rho = self.rho[i] * torch.sum(self.m * vij * dwij / self.rho)
+            grad_v = -1 * torch.sum(self.m * (p_rho_ij + pi_ij) * dwij)
+            grad_e = 0.5 * torch.sum(self.m * (p_rho_ij + pi_ij) * vij * dwij)
 
             rho_inc[i] = dt * grad_rho
             v_inc[i] = dt * grad_v
@@ -95,7 +90,7 @@ class Shocktube(object):
             ### Get XSPH Velocity and calculate increment ###
 
             rho_avg = 0.5 * (self.rho[i] + self.rho)
-            correction = self.epsilon * np.sum(self.m * -1 * vij * wij / rho_avg)
+            correction = self.epsilon * torch.sum(self.m * -1 * vij * wij / rho_avg)
             xsph_velocity =  self.v[i] + correction
 
             x_inc[i] = dt * xsph_velocity
@@ -119,10 +114,10 @@ class Shocktube(object):
         
         ## Define temp arrays for storing increments ##
         
-        x_inc = np.zeros_like(self.x, dtype='float32')
-        rho_inc = np.copy(self.rho) # not increment, direct corection
-        v_inc = np.zeros_like(self.x, dtype='float32')
-        e_inc = np.zeros_like(self.x, dtype='float32')
+        x_inc = torch.zeros_like(self.x, dtype=torch.float32).cuda()
+        rho_inc = self.rho.clone() # not increment, direct corection
+        v_inc = torch.zeros_like(self.x, dtype=torch.float32).cuda()
+        e_inc = torch.zeros_like(self.x, dtype=torch.float32).cuda()
         
         ## Iterate over all particles and store the accelerations in temp arrays ##
         ## 10 particles to the left and 10 particles to the right as boundary ###
@@ -157,17 +152,17 @@ class Shocktube(object):
 
             ### Evaluating gradients ###
 
-            grad_v = -1 * np.sum(self.m * (p_rho_ij + pi_ij) * dwij)            
-            grad_e = 0.5 * np.sum(self.m * (p_rho_ij + pi_ij) * vij * dwij)
+            grad_v = -1 * torch.sum(self.m * (p_rho_ij + pi_ij) * dwij)
+            grad_e = 0.5 * torch.sum(self.m * (p_rho_ij + pi_ij) * vij * dwij)
 
-            rho_inc[i] = np.sum(self.m * wij)
+            rho_inc[i] = torch.sum(self.m * wij)
             v_inc[i] = dt * grad_v
             e_inc[i] = dt * grad_e
             
             ### Get XSPH Velocity and calculate increment ###
 
             rho_avg = 0.5 * (self.rho[i] + self.rho)
-            correction = self.epsilon * np.sum(self.m * -1 * vij * wij / rho_avg)
+            correction = self.epsilon * torch.sum(self.m * -1 * vij * wij / rho_avg)
             xsph_velocity =  self.v[i] + correction
 
             x_inc[i] = dt * xsph_velocity
@@ -188,35 +183,35 @@ class Shocktube(object):
         self.x += x_inc
         
 if __name__ == '__main__':
+    with torch.no_grad():
+        left = torch.linspace(-0.5,0,320).cuda()
+        dxl = left[1] - left[0]
+        right = torch.linspace(0,0.5,40)[1:].cuda()
+        dxr = right[1] - right[0]
 
-    left = np.linspace(-0.5,0,320)
-    dxl = left[1] - left[0]
-    right = np.linspace(0,0.5,40)[1:]
-    dxr = right[1] - right[0]
+        left_boundary = torch.linspace(-0.5 - (35 * dxl), -0.5 - dxl, 35).cuda()
+        right_boundary = torch.linspace(0.5 + dxr, 0.5 + (35 * dxr), 35).cuda()
 
-    left_boundary = np.linspace(-0.5 - (35 * dxl), -0.5 - dxl, 35)
-    right_boundary = np.linspace(0.5 + dxr, 0.5 + (35 * dxr), 35)
+        h = 2*(right[1] - right[0])
 
-    h = 2*(right[1] - right[0])
+        left = torch.cat((left_boundary, left), dim=0)
+        right = torch.cat((right, right_boundary), dim=0)
 
-    left = np.append(left_boundary, left)
-    right = np.append(right, right_boundary)
+        x = torch.cat((left, right), dim=0)
 
-    x = np.append(left, right)
+        rho = torch.cat((torch.ones_like(left).cuda(), torch.ones_like(right).cuda()*0.125), dim=0)
+        p = torch.cat((torch.ones_like(left).cuda(), torch.ones_like(right).cuda()*0.1), dim=0)
+        v = torch.zeros_like(x).cuda()
+        gamma = 1.4
+        epsilon = 0.5
+        eta = 1e-04
+        m = 0.0015625000000000
 
-    rho = np.append(np.ones_like(left), np.ones_like(right)*0.125)
-    p = np.append(np.ones_like(left), np.ones_like(right)*0.1)
-    v = np.zeros_like(x)
-    gamma = 1.4
-    epsilon = 0.5
-    eta = 1e-04
-    m = 0.0015625000000000
+        st = Shocktube(x = x, p = p, rho = rho,
+                       v = v, m = m, h = h, gamma = gamma,
+                       epsilon = epsilon, eta = eta, kernel = cubic_spline)
 
-    st = Shocktube(x = x, p = p, rho = rho, \
-                   v = v, m = m, h = h, gamma = gamma, \
-                   epsilon = epsilon, eta = eta, kernel = cubic_spline)
-
-    for i in range(2000):
-        st.update_euler(dt=1e-04)
-        print(i)
+        for i in range(2000):
+            st.update_euler_SD(dt=1e-04)
+            print(i)
 
