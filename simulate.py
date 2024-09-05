@@ -1,31 +1,31 @@
 from shocktube import *
 import json
 
-left = np.linspace(-0.5,0,320)
+left = torch.linspace(-0.5,0,320).cuda()
 dxl = left[1] - left[0]
-right = np.linspace(0,0.5,40)[1:]
+right = torch.linspace(0,0.5,40)[1:].cuda()
 dxr = right[1] - right[0]
 
-left_boundary = np.linspace(-0.5 - (35 * dxl), -0.5 - dxl, 35)
-right_boundary = np.linspace(0.5 + dxr, 0.5 + (35 * dxr), 35)
+left_boundary = torch.linspace(-0.5 - (35 * dxl), -0.5 - dxl, 35).cuda()
+right_boundary = torch.linspace(0.5 + dxr, 0.5 + (35 * dxr), 35).cuda()
 
 h = 2*(right[1] - right[0])
 
-left = np.append(left_boundary, left)
-right = np.append(right, right_boundary)
+left = torch.cat((left_boundary, left), dim=0)
+right = torch.cat((right, right_boundary), dim=0)
 
-x = np.append(left, right)
+x = torch.cat((left, right), dim=0)
 
-rho = np.append(np.ones_like(left), np.ones_like(right)*0.125)
-p = np.append(np.ones_like(left), np.ones_like(right)*0.1)
-v = np.zeros_like(x)
+rho = torch.cat((torch.ones_like(left).cuda(), torch.ones_like(right).cuda()*0.125), dim=0)
+p = torch.cat((torch.ones_like(left).cuda(), torch.ones_like(right).cuda()*0.1), dim=0)
+v = torch.zeros_like(x).cuda()
 gamma = 1.4
 epsilon = 0.5
 eta = 1e-04
 m = 0.0015625000000000
 
-st = Shocktube(x = x, p = p, rho = rho, \
-               v = v, m = m, h = h, gamma = gamma, \
+st = Shocktube(x = x, p = p, rho = rho,
+               v = v, m = m, h = h, gamma = gamma,
                epsilon = epsilon, eta = eta, kernel = cubic_spline)
 
 
@@ -49,24 +49,24 @@ with open('shocktube_ce_output.json', 'w') as shock:
 
 ### Using summation density 
 
-left = np.linspace(-0.5,0,320)
+left = torch.linspace(-0.5,0,320).cuda()
 dxl = left[1] - left[0]
-right = np.linspace(0,0.5,40)[1:]
+right = torch.linspace(0,0.5,40)[1:].cuda()
 dxr = right[1] - right[0]
 
-left_boundary = np.linspace(-0.5 - (35 * dxl), -0.5 - dxl, 35)
-right_boundary = np.linspace(0.5 + dxr, 0.5 + (35 * dxr), 35)
+left_boundary = torch.linspace(-0.5 - (35 * dxl), -0.5 - dxl, 35).cuda()
+right_boundary = torch.linspace(0.5 + dxr, 0.5 + (35 * dxr), 35).cuda()
 
 h = 2*(right[1] - right[0])
 
-left = np.append(left_boundary, left)
-right = np.append(right, right_boundary)
+left = torch.cat((left_boundary, left), dim=0)
+right = torch.cat((right, right_boundary), dim=0)
 
-x = np.append(left, right)
+x = torch.cat((left, right), dim=0)
 
-rho = np.append(np.ones_like(left), np.ones_like(right)*0.125)
-p = np.append(np.ones_like(left), np.ones_like(right)*0.1)
-v = np.zeros_like(x)
+rho = torch.cat((torch.ones_like(left).cuda(), torch.ones_like(right).cuda()*0.125), dim=0)
+p = torch.cat((torch.ones_like(left).cuda(), torch.ones_like(right).cuda()*0.1), dim=0)
+v = torch.zeros_like(x).cuda()
 gamma = 1.4
 epsilon = 0.5
 eta = 1e-04
